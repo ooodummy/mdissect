@@ -5,6 +5,12 @@
 #include <vector>
 #include <functional>
 
+#define GET_CURRENT_CLASS(ClassName, Assembly, Token) \
+
+#define GET_CURRENT_GENERIC_CLASS(ClassName, Assembly, Token, ...) \
+
+#define STATIC_FIELD(T, NAME, ClassName, Token)                  \
+
 namespace mdissect {
     using fn_read_memory = bool(*)(uint64_t address, void* buffer, size_t size);
     using fn_write_memory = bool(*)(uint64_t address, const void* buffer, size_t size);
