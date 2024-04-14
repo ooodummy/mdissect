@@ -201,6 +201,13 @@ namespace mdissect {
         g_hash_table hash_table();
     };
 
+    bool inherits_from(const mono_class& klass, const mono_class& parent);
+
+    template <typename T>
+    bool inherits_from(const mono_class& klass) {
+        return inherits_from(klass, T::get_mono_klass());
+    }
+
     bool attach(uint64_t runtime);
 
     mono_domain get_root_domain();

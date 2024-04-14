@@ -371,4 +371,15 @@ namespace mdissect {
 
         return {};
     }
+
+    bool inherits_from(const mono_class& klass, const mono_class& parent) {
+        if (klass == parent)
+            return true;
+
+        const auto parent_klass = klass.parent();
+        if (parent_klass.address == 0)
+            return false;
+
+        return inherits_from(parent_klass, parent);
+    }
 }
