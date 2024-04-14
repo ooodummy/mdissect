@@ -1,19 +1,28 @@
 #ifndef MEMORY_MONO_HPP_
 #define MEMORY_MONO_HPP_
 
+#include <functional>
 #include <iostream>
 #include <vector>
-#include <functional>
 
-#define GET_CURRENT_CLASS(ClassName, Assembly, Token) \
+#define GET_CURRENT_CLASS(ClassName, Assembly, Token)                    \
+    static mdissect::mono_class get_mono_klass() {                       \
+        static const auto klass = mdissect::find_class(Assembly, Token); \
+        return klass;                                                    \
+    }
 
-#define GET_CURRENT_GENERIC_CLASS(ClassName, Assembly, Token, ...) \
+// TODO: Generics
+#define GET_CURRENT_GENERIC_CLASS(ClassName, Assembly, Token, ...)       \
+    static mdissect::mono_class get_mono_klass() {                       \
+        static const auto klass = mdissect::find_class(Assembly, Token); \
+        return klass;                                                    \
+    }
 
-#define STATIC_FIELD(T, NAME, ClassName, Token)                  \
+#define STATIC_FIELD(T, NAME, ClassName, Token)
 
 namespace mdissect {
-    using fn_read_memory = bool(*)(uint64_t address, void* buffer, size_t size);
-    using fn_write_memory = bool(*)(uint64_t address, const void* buffer, size_t size);
+    using fn_read_memory = bool (*)(uint64_t address, void* buffer, size_t size);
+    using fn_write_memory = bool (*)(uint64_t address, const void* buffer, size_t size);
 
     extern fn_read_memory read_memory;
     extern fn_write_memory write_memory;
@@ -118,12 +127,15 @@ namespace mdissect {
         mono_class() = default;
         explicit mono_class(uint64_t address) : address(address) {}
 
+        bool operator==(const mono_class& other) const {
+            return address == other.address;
+        }
+
         uint64_t address;
 
         mono_class parent() const;
-
         std::string name() const;
-
+        std::string nspace() const;
         int32_t token() const;
 
         std::vector<mono_field> fields() const;
@@ -168,6 +180,36 @@ namespace mdissect {
         int32_t size;
         uint64_t table;
     };
-}
+
+#define HASH_TABLE_SIZE 1103
+
+    struct g_hash_table {
+        g_hash_table() = default;
+        explicit g_hash_table(uint64_t address) : address(address) {}
+
+        uint64_t address;
+
+        mono_hash_table table[HASH_TABLE_SIZE];
+    };
+
+    struct mono_image_set {
+        mono_image_set() = default;
+        explicit mono_image_set(uint64_t address) : address(address) {}
+
+        uint64_t address;
+
+        g_hash_table hash_table();
+    };
+
+    bool attach(uint64_t runtime);
+
+    mono_domain get_root_domain();
+    mono_image_set get_image_set_cache_entry(int32_t index);
+    mdissect::mono_image get_assembly_image(std::string_view assembly_name);
+    uint64_t get_static_field_data(mdissect::mono_class mono_class);
+    uint64_t get_static_field_address(mdissect::mono_field field, mdissect::mono_class mono_class);
+    mono_class find_class(std::string_view assembly_name, uint32_t token);
+    mono_class find_class(std::string_view nspace, std::string_view name);
+} // namespace mdissect
 
 #endif

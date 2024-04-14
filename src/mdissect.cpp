@@ -178,6 +178,15 @@ namespace mdissect {
         return name;
     }
 
+    std::string mono_class::nspace() const {
+        char nspace[256] {};
+        if (!read(read<uint64_t>(address + offsets::MonoClassNamespace), nspace, sizeof(nspace) - 1))
+            return {};
+
+        return nspace;
+    }
+
+
     int32_t mono_class::token() const {
         return read<int32_t>(address + offsets::MonoClassTypeToken);
     }
@@ -253,7 +262,6 @@ namespace mdissect {
     int32_t mono_class::vtable_size() const {
         return read<int32_t>(address + offsets::MonoClassVTableSize);
     }
-
     // mono_object
 
     mono_vtable mono_object::vtable() const {
@@ -271,5 +279,96 @@ namespace mdissect {
     mono_hash_table::mono_hash_table(uint64_t address) : address(address) {
         size = read<int32_t>(address + offsets::MonoInternalHashTableSize);
         table = read<uint64_t>(address + offsets::MonoInternalHashTableTable);
+    }
+
+    // mono_image_set
+    g_hash_table mono_image_set::hash_table() {
+        return g_hash_table(read<uint64_t>(address + 0x28));
+    }
+
+    // helpers
+    mdissect::mono _mono;
+    mdissect::mono_domain _root_domain;
+    mdissect::mono_image _assembly_image;
+
+    bool attach(uint64_t runtime) {
+        _mono = mdissect::mono(runtime);
+        if (_mono.address == 0)
+            return false;
+
+        _root_domain = _mono.root_domain(0x499C78);
+        if (_root_domain.address == 0)
+            return false;
+
+        _assembly_image = get_assembly_image("Assembly-CSharp");
+        if (_assembly_image.address == 0)
+            return false;
+
+        return true;
+    }
+
+    mono_domain get_root_domain() {
+        return _root_domain;
+    }
+
+    mono_image_set get_image_set_cache_entry(int32_t index) {
+        return mono_image_set(read<uint64_t>(_mono.address + offsets::img_set_cache + index * 0x8));
+    }
+
+    mdissect::mono_image get_assembly_image(std::string_view assembly_name) {
+        for (const auto assembly: _root_domain.domain_assemblies()) {
+            const auto name = assembly.name();
+            if (name != assembly_name)
+                continue;
+
+            return assembly.image();
+        }
+
+        return {};
+    }
+
+    uint64_t get_static_field_data(mono_class mono_class) {
+        const auto vtable = mono_class.vtable(_root_domain);
+        if (vtable.address == 0)
+            return 0;
+
+        return vtable.static_field_data();
+    }
+
+    uint64_t get_static_field_address(mono_field field, mono_class mono_class) {
+        if (!field.address || !mono_class.address)
+            return 0;
+
+        const uint64_t static_field_data = get_static_field_data(mono_class);
+        if (static_field_data == 0)
+            return 0;
+
+        return static_field_data + field.offset();
+    }
+
+    mono_class find_class(std::string_view assembly_name, uint32_t token) {
+        auto assembly = get_assembly_image(assembly_name);
+        if (assembly.address == 0)
+            return {};
+
+        for (const auto type : assembly.types()) {
+            if (type.token() == token)
+                return type.vtable(_root_domain).mono_class();
+        }
+
+        return {};
+    }
+
+    mono_class mdissect::find_class(std::string_view nspace, std::string_view name) {
+        for (const auto& assembly : mdissect::get_root_domain().domain_assemblies()) {
+            const auto image = assembly.image();
+
+            for (const auto& type : image.types()) {
+                if (type.name() == name && type.nspace() == nspace)
+                    return type;
+            }
+        }
+
+        return {};
     }
 }

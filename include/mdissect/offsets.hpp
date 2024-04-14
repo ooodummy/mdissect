@@ -17,8 +17,10 @@ namespace offsets {
     constexpr int32_t MonoImageClassCache = 0x4C0;
 
     // _MonoClass
+    constexpr int32_t MonoClassInited = 0x20;
     constexpr int32_t MonoClassParent = 0x30;
     constexpr int32_t MonoClassName = 0x48;
+    constexpr int32_t MonoClassNamespace = 0x50;
     constexpr int32_t MonoClassTypeToken = 0x58;
     constexpr int32_t MonoClassVTableSize = 0x5C;
     constexpr int32_t MonoClassFields = 0x98;
@@ -59,6 +61,9 @@ namespace offsets {
     // _MonoInternalHashTable
     constexpr int32_t MonoInternalHashTableSize = 0x18;
     constexpr int32_t MonoInternalHashTableTable = 0x20;
+
+    // metadata
+    constexpr uint64_t img_set_cache = 0x49A400;
 }
 
 #endif
