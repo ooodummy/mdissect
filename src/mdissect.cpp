@@ -1,6 +1,7 @@
 #include <mdissect/mdissect.hpp>
-
 #include <mdissect/offsets.hpp>
+
+#include <cassert>
 
 namespace mdissect {
     fn_read_memory read_memory = nullptr;
@@ -29,7 +30,6 @@ namespace mdissect {
     }
 
     // mono_vtable
-
     bool mono_vtable::initialized() const {
         return read<uint8_t>(address + offsets::MonoVTableInitialized) != 0;
     }
@@ -41,7 +41,6 @@ namespace mdissect {
     uint64_t mono_vtable::static_field_data() const {
         if ((read<uint8_t>(address + offsets::MonoVTableFlags) & 0x4) != 0) {
             const auto parent_class = mono_class();
-
             return read<uint64_t>(address + offsets::MonoVTableVTable + parent_class.vtable_size() * 0x8);
         }
 
@@ -49,26 +48,37 @@ namespace mdissect {
     }
 
     // mono_image
+    std::string mono_image::filename() const {
+        char name[256] {};
+        if (!read(read<uint64_t>(address + offsets::MonoImageName), name, sizeof(name) - 1))
+            return {};
+
+        return name;
+    }
 
     std::vector<mono_class> mono_image::types() const {
         std::vector<mono_class> result;
 
-        const auto cache = mono_hash_table(address + offsets::MonoImageClassCache);
+        const auto cache = mono_internal_hash_table(address + offsets::MonoImageClassCache);
+        const auto cache_size = cache.size();
+        const auto cache_table = cache.table();
 
-        for (int32_t i = 0; i < cache.size; ++i) {
-            for (uint64_t it = read<uint64_t>(cache.table + i * 0x8); it != 0; it = read<uint64_t>(it + offsets::MonoClassDefNextCache)) {
-                result.emplace_back(mono_class(it));
+        for (int32_t i = 0; i < cache_size; ++i) {
+            for (auto it = read<uint64_t>(cache_table + i * 0x8); it != 0; it = read<uint64_t>(it + offsets::MonoClassDefNextCache)) {
+                result.emplace_back(it);
             }
         }
 
         return result;
     }
 
-    mono_class mono_image::get_type(fn_match_callback callback) const {
-        const auto cache = mono_hash_table(address + offsets::MonoImageClassCache);
+    mono_class mono_image::get_type(const fn_match_callback& callback) const {
+        const auto cache = mono_internal_hash_table(address + offsets::MonoImageClassCache);
+        const auto cache_size = cache.size();
+        const auto cache_table = cache.table();
 
-        for (int32_t j = 0; j < cache.size; ++j) {
-            for (uint64_t it = read<uint64_t>(cache.table + j * 0x8); it != 0; it = read<uint64_t>(it + offsets::MonoClassDefNextCache)) {
+        for (int32_t j = 0; j < cache_size; ++j) {
+            for (auto it = read<uint64_t>(cache_table + j * 0x8); it != 0; it = read<uint64_t>(it + offsets::MonoClassDefNextCache)) {
                 const auto mono_class = mdissect::mono_class(it);
 
                 if (callback(mono_class))
@@ -80,7 +90,6 @@ namespace mdissect {
     }
 
     // mono_assembly
-
     std::string mono_assembly::name() const {
         char name[256] {};
         if (!read(read<uint64_t>(address + offsets::MonoAssemblyName), name, sizeof(name) - 1))
@@ -94,27 +103,33 @@ namespace mdissect {
     }
 
     // mono_domain
-
     int32_t mono_domain::domain_id() const {
-        return read<int32_t>(address + 0xBC);
+        return read<int32_t>(address + offsets::MonoDomainDomainId);
     }
 
     std::vector<mono_assembly> mono_domain::domain_assemblies() const {
         std::vector<mono_assembly> result;
 
-        const uint64_t assemblies = read<uint64_t>(address + offsets::DomainDomainAssemblies);
+        const auto assemblies = read<uint64_t>(address + offsets::MonoDomainDomainAssemblies);
         for (uint64_t it = assemblies; it != 0; it = read<uint64_t>(it + 0x8)) {
-            const uint64_t assembly = read<uint64_t>(it);
+            const auto assembly = read<uint64_t>(it);
             if (assembly == 0)
                 continue;
 
-            result.emplace_back(mono_assembly(assembly));
+            result.emplace_back(assembly);
         }
 
         return result;
     }
 
     // mono_method
+    int32_t mono_method::token() const {
+        return read<int32_t>(address + offsets::MonoMethodToken);
+    }
+
+    mono_class mono_method::mono_class() const {
+        return mdissect::mono_class(read<uint64_t>(address + offsets::MonoMethodClass));
+    }
 
     std::string mono_method::name() const {
         char name[256] {};
@@ -125,6 +140,9 @@ namespace mdissect {
     }
 
     // mono_type
+    mono_class mono_type::mono_class() const {
+        return mdissect::mono_class(read<uint64_t>(address + offsets::MonoTypeData));
+    }
 
     uint32_t mono_type::attributes() const {
         return read<uint32_t>(address + offsets::MonoTypeAttributes);
@@ -138,13 +156,12 @@ namespace mdissect {
         return (attributes() & 0x40) != 0;
     }
 
-    mono_class mono_type::mono_class() const {
-        return mdissect::mono_class(read<uint64_t>(address + offsets::MonoTypeData));
+    // mono_field
+    mono_type mono_class_field::type() const {
+        return mono_type(read<uint64_t>(address + offsets::MonoClassFieldType));
     }
 
-    // mono_field
-
-    std::string mono_field::name() const {
+    std::string mono_class_field::name() const {
         char name[256] {};
         if (!read(read<uint64_t>(address + offsets::MonoClassFieldName), name, sizeof(name) - 1))
             return {};
@@ -152,22 +169,21 @@ namespace mdissect {
         return name;
     }
 
-    int32_t mono_field::offset() const {
-        return read<int32_t>(address + offsets::MonoClassFieldOffset);
-    }
-
-    mono_class mono_field::parent() const {
+    mono_class mono_class_field::parent() const {
         return mono_class(read<uint64_t>(address + offsets::MonoClassFieldParent));
     }
 
-    mono_type mono_field::type() const {
-        return mono_type(read<uint64_t>(address + offsets::MonoClassFieldType));
+    int32_t mono_class_field::offset() const {
+        return read<int32_t>(address + offsets::MonoClassFieldOffset);
     }
 
     // mono_class
-
     mono_class mono_class::parent() const {
         return mono_class(read<uint64_t>(address + offsets::MonoClassParent));
+    }
+
+    mono_class mono_class::nesting_type() const {
+        return mono_class(read<uint64_t>(address + offsets::MonoClassNestedIn));
     }
 
     std::string mono_class::name() const {
@@ -178,7 +194,7 @@ namespace mdissect {
         return name;
     }
 
-    std::string mono_class::nspace() const {
+    std::string mono_class::name_space() const {
         char nspace[256] {};
         if (!read(read<uint64_t>(address + offsets::MonoClassNamespace), nspace, sizeof(nspace) - 1))
             return {};
@@ -186,64 +202,40 @@ namespace mdissect {
         return nspace;
     }
 
-
-    int32_t mono_class::token() const {
+    int32_t mono_class::type_token() const {
         return read<int32_t>(address + offsets::MonoClassTypeToken);
     }
 
-    std::vector<mono_field> mono_class::fields() const {
+    int32_t mono_class::vtable_size() const {
+        return read<int32_t>(address + offsets::MonoClassVTableSize);
+    }
+
+    std::vector<mono_class_field> mono_class::fields() const {
         const auto fields = read<uint64_t>(address + offsets::MonoClassFields);
         const auto field_count = read<int32_t>(address + offsets::MonoClassDefFieldCount);
 
-        std::vector<mono_field> result;
+        std::vector<mono_class_field> result;
         result.reserve(field_count);
 
         for (int32_t i = 0; i < field_count; ++i)
-            result.emplace_back(mono_field(fields + i * 0x20));
+            result.emplace_back(fields + i * 0x20);
 
         return result;
     }
 
-    mono_field mono_class::get_field(fn_match_field_callback callback) const {
-        const auto fields = read<uint64_t>(address + offsets::MonoClassFields);
-        const auto field_count = read<int32_t>(address + offsets::MonoClassDefFieldCount);
-        for (int32_t i = 0; i < field_count; ++i) {
-            const auto mono_field = mdissect::mono_field(fields + i * 0x20);
-            if (callback(mono_field))
-                return mono_field;
-        }
-
-        return mono_field(0);
-    }
-
     std::vector<mono_method> mono_class::methods() const {
-        const auto method_count = read<uint32_t>(address + offsets::MonoClassDefMethodCount);
+        const auto count = method_count();
         const auto methods = read<uint64_t>(address + offsets::MonoClassMethods);
         if (methods == 0)
             return {};
 
         std::vector<mono_method> result;
-        result.reserve(method_count);
+        result.reserve(count);
 
-        for (uint32_t i = 0; i < method_count; ++i)
-            result.emplace_back(mono_method(read<uint64_t>(methods + i * 0x8)));
+        for (uint32_t i = 0; i < count; ++i)
+            result.emplace_back(read<uint64_t>(methods + i * 0x8));
 
         return result;
-    }
-
-    mono_method mono_class::get_method(fn_match_method_callback callback) const {
-        const auto method_count = read<uint32_t>(address + offsets::MonoClassDefMethodCount);
-        const auto methods = read<uint64_t>(address + offsets::MonoClassMethods);
-        if (methods == 0)
-            return mono_method(0);
-
-        for (uint32_t i = 0; i < method_count; ++i) {
-            const auto mono_method = mdissect::mono_method(read<uint64_t>(methods + i * 0x8));
-            if (callback(mono_method))
-                return mono_method;
-        }
-
-        return mono_method(0);
     }
 
     mono_vtable mono_class::vtable(mono_domain domain) const {
@@ -259,34 +251,125 @@ namespace mdissect {
         return mono_vtable(read<uint64_t>(runtime_info + offsets::MonoClassRuntimeInfoDomainVTables + domain_id * 0x8));
     }
 
-    int32_t mono_class::vtable_size() const {
-        return read<int32_t>(address + offsets::MonoClassVTableSize);
+    uint32_t mono_class::class_kind() const {
+        return ((read<uint32_t>(address + 0x15)) & 7) - 1;
     }
-    // mono_object
 
+    // mono_class_get_method_count
+    uint32_t mono_class::method_count() const {
+        auto kind = class_kind();
+        mono_class element_class = *this;
+
+        while (true) {
+            switch (kind) {
+                case 0:
+                case 1:
+                    return read<uint32_t>(element_class.address + offsets::MonoClassDefMethodCount);
+                case 2:
+                    element_class = mono_class(read<uint64_t>(read<uint64_t>(element_class.address + offsets::MonoClassDefFlags)));
+                    kind = element_class.class_kind();
+                    if (kind > 5)
+                        return 0;
+                    continue;
+                case 3:
+                case 5:
+                    return 0;
+                case 4:
+                    return read<uint32_t>(element_class.address + offsets::MonoClassDefFlags);
+                default:
+                    return 0;
+            }
+        }
+    }
+
+    mono_class_field mono_class::get_field(const fn_match_field_callback& callback) const {
+        const auto fields = read<uint64_t>(address + offsets::MonoClassFields);
+        const auto field_count = read<int32_t>(address + offsets::MonoClassDefFieldCount);
+        for (int32_t i = 0; i < field_count; ++i) {
+            const auto mono_field = mdissect::mono_class_field(fields + i * 0x20);
+            if (callback(mono_field))
+                return mono_field;
+        }
+
+        return mono_class_field(0);
+    }
+
+    mono_class_field mono_class::get_field(std::string_view field_name) const {
+        return get_field([&field_name](const mono_class_field& field) {
+            return field.name() == field_name;
+        });
+    }
+
+    mono_class_field mono_class::get_field(int32_t token) const {
+        // TODO: Rebuild mono_class_get_field_token
+        return mono_class_field(0);
+    }
+
+
+    mono_method mono_class::get_method(const fn_match_method_callback& callback) const {
+        const auto method_count = read<uint32_t>(address + offsets::MonoClassDefMethodCount);
+        const auto methods = read<uint64_t>(address + offsets::MonoClassMethods);
+        if (methods == 0)
+            return mono_method(0);
+
+        for (uint32_t i = 0; i < method_count; ++i) {
+            const auto mono_method = mdissect::mono_method(read<uint64_t>(methods + i * 0x8));
+            if (callback(mono_method))
+                return mono_method;
+        }
+
+        return mono_method(0);
+    }
+
+    mono_method mono_class::get_method(std::string_view method_name) const {
+        return get_method([&method_name](const mono_method& method) {
+            return method.name() == method_name;
+        });
+    }
+
+    mono_method mono_class::get_method(int32_t token) const {
+        return get_method([token](const mono_method& method) {
+            return method.token() == token;
+        });
+    }
+
+    // mono_object
     mono_vtable mono_object::vtable() const {
         return mono_vtable(read<uint64_t>(address + offsets::MonoObjectVTable));
     }
 
     // mono
-
     mono_domain mono::root_domain(uint64_t offset) const {
         return mono_domain(read<uint64_t>(address + offset));
     }
 
     // mono_hash_table
+    int32_t mono_internal_hash_table::size() const {
+        return read<int32_t>(address + offsets::MonoInternalHashTableSize);
+    }
 
-    mono_hash_table::mono_hash_table(uint64_t address) : address(address) {
-        size = read<int32_t>(address + offsets::MonoInternalHashTableSize);
-        table = read<uint64_t>(address + offsets::MonoInternalHashTableTable);
+    uint64_t mono_internal_hash_table::table() const {
+        return read<uint64_t>(address + offsets::MonoInternalHashTableTable);
     }
 
     // mono_image_set
-    g_hash_table mono_image_set::hash_table() {
-        return g_hash_table(read<uint64_t>(address + 0x28));
+    uint64_t mono_image_set::hash_table() const {
+        return read<uint64_t>(address + 0x28);
     }
 
     // helpers
+    bool as_internal(const mono_class& klass, const mono_class& parent) { // NOLINT(*-no-recursion)
+        if (klass == parent)
+            return true;
+
+        const auto parent_klass = klass.parent();
+        if (parent_klass.address == 0)
+            return false;
+
+        return as_internal(parent_klass, parent);
+    }
+
+    // default domain and image for helper functions
     mdissect::mono _mono;
     mdissect::mono_domain _root_domain;
     mdissect::mono_image _assembly_image;
@@ -335,7 +418,7 @@ namespace mdissect {
         return vtable.static_field_data();
     }
 
-    uint64_t get_static_field_address(mono_field field, mono_class mono_class) {
+    uint64_t get_static_field_address(mono_class_field field, mono_class mono_class) {
         if (!field.address || !mono_class.address)
             return 0;
 
@@ -346,25 +429,12 @@ namespace mdissect {
         return static_field_data + field.offset();
     }
 
-    mono_class find_class(std::string_view assembly_name, uint32_t token) {
-        auto assembly = get_assembly_image(assembly_name);
-        if (assembly.address == 0)
-            return {};
-
-        for (const auto type : assembly.types()) {
-            if (type.token() == token)
-                return type.vtable(_root_domain).mono_class();
-        }
-
-        return {};
-    }
-
-    mono_class mdissect::find_class(std::string_view nspace, std::string_view name) {
-        for (const auto& assembly : mdissect::get_root_domain().domain_assemblies()) {
+    mono_class find_class(std::string_view namespace_name, std::string_view class_name) {
+        for (const auto& assembly: mdissect::get_root_domain().domain_assemblies()) {
             const auto image = assembly.image();
 
-            for (const auto& type : image.types()) {
-                if (type.name() == name && type.nspace() == nspace)
+            for (const auto& type: image.types()) {
+                if (type.name_space() == namespace_name && type.name() == class_name)
                     return type;
             }
         }
@@ -372,14 +442,39 @@ namespace mdissect {
         return {};
     }
 
-    bool inherits_from(const mono_class& klass, const mono_class& parent) {
-        if (klass == parent)
-            return true;
+    mono_class find_class(std::string_view assembly_name, uint32_t token) {
+        auto assembly = get_assembly_image(assembly_name);
+        if (assembly.address == 0)
+            return {};
 
-        const auto parent_klass = klass.parent();
-        if (parent_klass.address == 0)
-            return false;
+        for (const auto type: assembly.types()) {
+            if (type.type_token() == token)
+                return type.vtable(_root_domain).mono_class();
+        }
 
-        return inherits_from(parent_klass, parent);
+        return {};
     }
-}
+
+    mono_method find_method(std::string_view namespace_name, std::string_view class_name, std::string_view method_name) {
+        const auto klass = find_class(namespace_name, class_name);
+        if (klass.address == 0)
+            return mono_method(0);
+
+        return klass.get_method(method_name);
+    }
+
+    mono_method mdissect::find_method(std::string_view assembly_name, uint32_t token) {
+        const auto image = get_assembly_image(assembly_name);
+        if (image.address == 0)
+            return mono_method(0);
+
+        for (const auto& type: image.types()) {
+            for (const auto& method: type.methods()) {
+                if (method.token() == token)
+                    return method;
+            }
+        }
+
+        return mono_method(0);
+    }
+} // namespace mdissect
