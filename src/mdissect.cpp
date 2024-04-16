@@ -123,8 +123,8 @@ namespace mdissect {
     }
 
     // mono_method
-    int32_t mono_method::token() const {
-        return read<int32_t>(address + offsets::MonoMethodToken);
+    uint32_t mono_method::token() const {
+        return read<uint32_t>(address + offsets::MonoMethodToken);
     }
 
     mono_class mono_method::mono_class() const {
@@ -202,8 +202,8 @@ namespace mdissect {
         return nspace;
     }
 
-    int32_t mono_class::type_token() const {
-        return read<int32_t>(address + offsets::MonoClassTypeToken);
+    uint32_t mono_class::type_token() const {
+        return read<uint32_t>(address + offsets::MonoClassTypeToken);
     }
 
     int32_t mono_class::vtable_size() const {
@@ -300,7 +300,7 @@ namespace mdissect {
         });
     }
 
-    mono_class_field mono_class::get_field(int32_t token) const {
+    mono_class_field mono_class::get_field(uint32_t token) const {
         // TODO: Rebuild mono_class_get_field_token
         return mono_class_field(0);
     }
@@ -327,7 +327,7 @@ namespace mdissect {
         });
     }
 
-    mono_method mono_class::get_method(int32_t token) const {
+    mono_method mono_class::get_method(uint32_t token) const {
         return get_method([token](const mono_method& method) {
             return method.token() == token;
         });
@@ -463,7 +463,7 @@ namespace mdissect {
         return klass.get_method(method_name);
     }
 
-    mono_method mdissect::find_method(std::string_view assembly_name, uint32_t token) {
+    mono_method find_method(std::string_view assembly_name, uint32_t token) {
         const auto image = get_assembly_image(assembly_name);
         if (image.address == 0)
             return mono_method(0);

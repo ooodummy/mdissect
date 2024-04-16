@@ -94,7 +94,7 @@ namespace mdissect {
 
         uint64_t address;
 
-        [[nodiscard]] int32_t token() const;
+        [[nodiscard]] uint32_t token() const;
         [[nodiscard]] mono_class mono_class() const;
         [[nodiscard]] std::string name() const;
     };
@@ -137,7 +137,7 @@ namespace mdissect {
         [[nodiscard]] mono_class nesting_type() const;
         [[nodiscard]] std::string name() const;
         [[nodiscard]] std::string name_space() const;
-        [[nodiscard]] int32_t type_token() const;
+        [[nodiscard]] uint32_t type_token() const;
         [[nodiscard]] int32_t vtable_size() const;
         [[nodiscard]] std::vector<mono_class_field> fields() const;
         [[nodiscard]] std::vector<mono_method> methods() const;
@@ -150,7 +150,7 @@ namespace mdissect {
         [[nodiscard]] mono_class_field get_field(const fn_match_field_callback& callback) const;
 
         [[nodiscard]] mono_class_field get_field(std::string_view field_name) const;
-        [[nodiscard]] mono_class_field get_field(int32_t token) const;
+        [[nodiscard]] mono_class_field get_field(uint32_t token) const;
 
         using fn_match_method_callback = std::function<bool(mono_method)>;
         [[nodiscard]] mono_method get_method(const fn_match_method_callback& callback) const;
@@ -158,7 +158,7 @@ namespace mdissect {
         // TODO: Setup signatures to find by args
         // TODO: Param count search option
         [[nodiscard]] mono_method get_method(std::string_view method_name) const;
-        [[nodiscard]] mono_method get_method(int32_t token) const;
+        [[nodiscard]] mono_method get_method(uint32_t token) const;
     };
 
     struct mono_object {
