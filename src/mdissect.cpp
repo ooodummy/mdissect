@@ -255,6 +255,30 @@ namespace mdissect {
         return ((read<uint32_t>(address + 0x15)) & 7) - 1;
     }
 
+    bool mono_class::is_blittable() const {
+        return (read<uint32_t>(address + 0x8) >> 4) & 1;
+    }
+
+    bool mono_class::is_delegate() const {
+        return (read<uint32_t>(address + 10) >> 8) * 1;
+    }
+
+    bool mono_class::is_enum() const {
+        return (read<uint32_t>(address + 8) >> 3) & 1;
+    }
+
+    bool mono_class::is_generic() const {
+        return (read<uint32_t>(address + 10) & 0x70000) == 0x20000;
+    }
+
+    bool mono_class::is_inflated() const {
+        return (read<uint32_t>(address + 10) & 0x70000) == 196608;
+    }
+
+    bool mono_class::is_valuetype() const {
+        return (read<uint32_t>(address + 8) >> 2) & 1;
+    }
+
     // mono_class_get_method_count
     uint32_t mono_class::method_count() const {
         auto kind = class_kind();
@@ -331,6 +355,24 @@ namespace mdissect {
         return get_method([token](const mono_method& method) {
             return method.token() == token;
         });
+    }
+
+    // mono_generic_context
+    uint64_t mono_generic_context::class_inst() const {
+        return read<uint64_t>(address + offsets::MonoGenericContextClassInst);
+    }
+
+    uint64_t mono_generic_context::method_inst() const {
+        return read<uint64_t>(address + offsets::MonoGenericContextMethodInst);
+    }
+
+    // mono_generic_class
+    mono_generic_context mono_generic_class::context() const {
+        return mono_generic_context(read<uint64_t>(address + offsets::MonoGenericClassContext));
+    }
+
+    mono_class mono_generic_class::cached_class() const {
+        return mono_class(read<uint64_t>(address + offsets::MonoGenericClassCachedClass));
     }
 
     // mono_object

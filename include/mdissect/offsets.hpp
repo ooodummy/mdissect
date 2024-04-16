@@ -67,6 +67,15 @@ namespace offsets {
     constexpr int32_t MonoClassDefFieldCount = 0x100;
     constexpr int32_t MonoClassDefNextCache = 0x108;
 
+    // _MonoGenericClass
+    constexpr int32_t MonoGenericClassContext = 0x8;
+    constexpr int32_t MonoGenericClassCachedClass = 0x20;
+    constexpr int32_t MonoGenericClassOwner = 0x28;
+
+    // _MonoGenericContext
+    constexpr int32_t MonoGenericContextClassInst = 0x0;
+    constexpr int32_t MonoGenericContextMethodInst = 0x8;
+
     // _MonoClassField
     constexpr int32_t MonoClassFieldType = 0x0;
     constexpr int32_t MonoClassFieldName = 0x8;

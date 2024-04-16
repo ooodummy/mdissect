@@ -146,6 +146,13 @@ namespace mdissect {
         [[nodiscard]] uint32_t class_kind() const;
         [[nodiscard]] uint32_t method_count() const;
 
+        [[nodiscard]] bool is_blittable() const;
+        [[nodiscard]] bool is_delegate() const;
+        [[nodiscard]] bool is_enum() const;
+        [[nodiscard]] bool is_generic() const;
+        [[nodiscard]] bool is_inflated() const;
+        [[nodiscard]] bool is_valuetype() const;
+
         using fn_match_field_callback = std::function<bool(mono_class_field)>;
         [[nodiscard]] mono_class_field get_field(const fn_match_field_callback& callback) const;
 
@@ -159,6 +166,26 @@ namespace mdissect {
         // TODO: Param count search option
         [[nodiscard]] mono_method get_method(std::string_view method_name) const;
         [[nodiscard]] mono_method get_method(uint32_t token) const;
+    };
+
+    struct mono_generic_context {
+        mono_generic_context() = default;
+        explicit mono_generic_context(uint64_t address) : address(address) {}
+
+        uint64_t address;
+
+        [[nodiscard]] uint64_t class_inst() const;
+        [[nodiscard]] uint64_t method_inst() const;
+    };
+
+    struct mono_generic_class {
+        mono_generic_class() = default;
+        explicit mono_generic_class(uint64_t address) : address(address) {}
+
+        uint64_t address;
+
+        [[nodiscard]] mono_generic_context context() const;
+        [[nodiscard]] mono_class cached_class() const;
     };
 
     struct mono_object {
