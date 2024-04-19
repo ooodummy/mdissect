@@ -248,6 +248,9 @@ namespace mdissect {
 
     mono_method find_method(std::string_view namespace_name, std::string_view class_name, std::string_view method_name);
     mono_method find_method(std::string_view assembly_name, uint32_t token);
+
+    mono_class find_class_containing_method(std::string_view method_name);
+    mono_class find_class_containing_field(std::string_view field_name);
 } // namespace mdissect
 
 #endif

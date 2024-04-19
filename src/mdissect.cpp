@@ -519,4 +519,49 @@ namespace mdissect {
 
         return mono_method(0);
     }
+    mono_class find_class_containing_method(std::string_view method_name) {
+        for (const auto assembly : _root_domain.domain_assemblies()) {
+            if (assembly.address == 0)
+                continue;
+
+            const auto image = assembly.image();
+            if (image.address == 0)
+                continue;
+
+            for (const auto type : image.types()) {
+                if (type.address == 0)
+                    continue;
+
+                for (const auto method : type.methods()) {
+                    if (method.name() == method_name)
+                        return type;
+                }
+            }
+        }
+
+        return mono_class(0);
+    }
+
+    mono_class find_class_containing_field(std::string_view field_name) {
+        for (const auto assembly : _root_domain.domain_assemblies()) {
+            if (assembly.address == 0)
+                continue;
+
+            const auto image = assembly.image();
+            if (image.address == 0)
+                continue;
+
+            for (const auto type : image.types()) {
+                if (type.address == 0)
+                    continue;
+
+                for (const auto field : type.fields()) {
+                    if (field.name() == field_name)
+                        return type;
+                }
+            }
+        }
+
+        return mono_class(0);
+    }
 } // namespace mdissect
