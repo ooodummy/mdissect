@@ -177,6 +177,45 @@ namespace mdissect {
         return read<int32_t>(address + offsets::MonoClassFieldOffset);
     }
 
+    uint32_t mono_class_field::token() const {
+        auto parent = this->parent();
+        if (!parent.address)
+            return 0;
+
+        uint32_t first_field_index = 0;
+        int32_t field_count = 0;
+
+        int32_t index = 0;
+
+        while (true) {
+            if (parent.fields().size() == 0)
+                return 0;
+
+            first_field_index = parent.first_field_idx();
+            field_count = parent.field_count();
+            index = 0;
+
+            if (field_count > 0)
+                break;
+
+        next_parent:
+            parent = parent.parent();
+            if (parent.address == 0)
+                return 0;
+        }
+
+        while (parent.fields().at(index).address != this->address) {
+            if (++index >= field_count)
+                goto next_parent;
+        }
+
+        const int32_t v6 = index + 1;
+        const auto image = parent.image();
+
+        const uint32_t v8 = first_field_index + v6;
+        return v8 | 0x4000000;
+    }
+
     // mono_class
     mono_class mono_class::parent() const {
         return mono_class(read<uint64_t>(address + offsets::MonoClassParent));
@@ -184,6 +223,10 @@ namespace mdissect {
 
     mono_class mono_class::nesting_type() const {
         return mono_class(read<uint64_t>(address + offsets::MonoClassNestedIn));
+    }
+
+    mono_image mono_class::image() const {
+        return mono_image(read<uint64_t>(address + offsets::MonoClassImage));
     }
 
     std::string mono_class::name() const {
@@ -210,8 +253,44 @@ namespace mdissect {
         return read<int32_t>(address + offsets::MonoClassVTableSize);
     }
 
+    int32_t mono_class::field_count() const {
+        /*unsigned int v1; // eax
+
+        v1 = *((_WORD *)&klass->klass + 21) & 7;
+        if ( !v1 )
+            goto LABEL_5;
+        while ( v1 > 2 )
+        {
+            if ( v1 != 3 )
+            {
+                if ( v1 - 4 <= 2 )
+                    return 0i64;
+                LABEL_5:
+                      monoeg_assertion_message(
+                        "* Assertion: should not be reached at %s:%d\n",
+                        "..\\mono\\metadata\\class-accessors.c",
+                        211i64);
+            }
+            klass = **(MonoClassDef ***)&klass->flags;
+            v1 = *((_WORD *)&klass->klass + 21) & 7;
+            if ( !v1 )
+                goto LABEL_5;
+        }
+        return klass->field_count;*/
+
+        return read<int32_t>(address + offsets::MonoClassDefFieldCount);
+    }
+
+    uint32_t mono_class::first_field_idx() const {
+        // TODO: Should check class flags
+        return read<uint32_t>(address + offsets::MonoClassDefFirstFieldIdx);
+    }
+
     std::vector<mono_class_field> mono_class::fields() const {
         const auto fields = read<uint64_t>(address + offsets::MonoClassFields);
+        if (fields == 0)
+            return {};
+
         const auto field_count = read<int32_t>(address + offsets::MonoClassDefFieldCount);
 
         std::vector<mono_class_field> result;
@@ -401,6 +480,11 @@ namespace mdissect {
 
     // helpers
     bool as_internal(const mono_class& klass, const mono_class& parent) { // NOLINT(*-no-recursion)
+        // Sometimes objects so when getting the vtable to get the class it's incorrect
+        // L33T fix
+        if (klass.address <= 0x40000)
+            return false;
+
         if (klass == parent)
             return true;
 
@@ -416,7 +500,7 @@ namespace mdissect {
     mdissect::mono_domain _root_domain;
     mdissect::mono_image _assembly_image;
 
-    bool attach(uint64_t runtime) {
+    bool attach(const uint64_t runtime) {
         _mono = mdissect::mono(runtime);
         if (_mono.address == 0)
             return false;

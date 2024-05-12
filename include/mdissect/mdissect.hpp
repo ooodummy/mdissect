@@ -5,10 +5,15 @@
 #include <iostream>
 #include <vector>
 
-#define GET_CURRENT_CLASS(ClassName, Assembly, Token)                    \
-    static mdissect::mono_class get_mono_klass() {                       \
-        static const auto klass = mdissect::find_class(Assembly, Token); \
-        return klass;                                                    \
+#define GET_CURRENT_CLASS(ClassName, Assembly, Token)                       \
+    static mdissect::mono_class get_mono_klass() {                          \
+        static const auto klass = mdissect::find_class(Assembly, Token);    \
+        return klass;                                                       \
+    }                                                                       \
+                                                                            \
+    static uint64_t get_static_field_data() {                                                       \
+        static const auto static_field_data = mdissect::get_static_field_data(get_mono_klass());    \
+        return static_field_data;                                                                   \
     }
 
 // TODO: Generics
@@ -18,7 +23,33 @@
         return klass;                                                    \
     }
 
-#define STATIC_FIELD(T, NAME, ClassName, Token)
+#define STATIC_FIELD(T, NAME, ClassName, Token) \
+/*    __forceinline element<T, true> NAME() const {                                                             \
+        static_assert(this->klass_size() > OFFSET, "OFFSET IS GREATER THAN BUFFER!");                         \
+        return element<T, true>(*((T*) &this->memory_block_data[OFFSET]), this->sync_block_address + OFFSET); \
+    }*/
+
+/*__forceinline element<int32_t, true> interactable_line_cast_layer_mask_() const {
+    static const auto klass = get_mono_klass();
+    static int32_t field_offset = 0;
+    static bool found_field = false;
+
+    if (!found_field) {
+        for (const auto& field : klass.fields()) {
+            if (!field.address)
+                continue;
+
+            if (field.token() == token) {
+                field_offset = field.offset();
+                found_field = true;
+            }
+        }
+    }
+    static uint64_t offset = 0x0;
+
+    return element<int32_t, true>(0, 0);
+    //return element<int32_t, true>(*((int32_t*) &this->memory_block_data[OFFSET]), this->sync_block_address + OFFSET);
+}*/
 
 #define HASH_TABLE_SIZE 1103
 
@@ -35,6 +66,7 @@ namespace mdissect {
 
     struct mono_vtable {
         mono_vtable() = default;
+
         explicit mono_vtable(uint64_t address) : address(address) {};
 
         uint64_t address;
@@ -49,6 +81,7 @@ namespace mdissect {
 
     struct mono_image {
         mono_image() = default;
+
         explicit mono_image(uint64_t address) : address(address) {};
 
         uint64_t address;
@@ -62,6 +95,7 @@ namespace mdissect {
 
     struct mono_assembly {
         mono_assembly() = default;
+
         explicit mono_assembly(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -72,6 +106,7 @@ namespace mdissect {
 
     struct mono_domain {
         mono_domain() = default;
+
         explicit mono_domain(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -90,6 +125,7 @@ namespace mdissect {
 
     struct mono_method {
         mono_method() = default;
+
         explicit mono_method(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -101,6 +137,7 @@ namespace mdissect {
 
     struct mono_type {
         mono_type() = default;
+
         explicit mono_type(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -113,6 +150,7 @@ namespace mdissect {
 
     struct mono_class_field {
         mono_class_field() = default;
+
         explicit mono_class_field(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -121,10 +159,12 @@ namespace mdissect {
         [[nodiscard]] std::string name() const;
         [[nodiscard]] mono_class parent() const;
         [[nodiscard]] int32_t offset() const;
+        [[nodiscard]] uint32_t token() const;
     };
 
     struct mono_class {
         mono_class() = default;
+
         explicit mono_class(uint64_t address) : address(address) {}
 
         bool operator==(const mono_class& other) const {
@@ -135,10 +175,13 @@ namespace mdissect {
 
         [[nodiscard]] mono_class parent() const;
         [[nodiscard]] mono_class nesting_type() const;
+        [[nodiscard]] mono_image image() const;
         [[nodiscard]] std::string name() const;
         [[nodiscard]] std::string name_space() const;
         [[nodiscard]] uint32_t type_token() const;
         [[nodiscard]] int32_t vtable_size() const;
+        [[nodiscard]] int32_t field_count() const;
+        [[nodiscard]] uint32_t first_field_idx() const;
         [[nodiscard]] std::vector<mono_class_field> fields() const;
         [[nodiscard]] std::vector<mono_method> methods() const;
         [[nodiscard]] mono_vtable vtable(mono_domain domain) const;
@@ -170,6 +213,7 @@ namespace mdissect {
 
     struct mono_generic_context {
         mono_generic_context() = default;
+
         explicit mono_generic_context(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -180,6 +224,7 @@ namespace mdissect {
 
     struct mono_generic_class {
         mono_generic_class() = default;
+
         explicit mono_generic_class(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -190,6 +235,7 @@ namespace mdissect {
 
     struct mono_object {
         mono_object() = default;
+
         explicit mono_object(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -199,6 +245,7 @@ namespace mdissect {
 
     struct mono {
         mono() = default;
+
         explicit mono(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -208,6 +255,7 @@ namespace mdissect {
 
     struct mono_internal_hash_table {
         mono_internal_hash_table() = default;
+
         explicit mono_internal_hash_table(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -218,6 +266,7 @@ namespace mdissect {
 
     struct mono_image_set {
         mono_image_set() = default;
+
         explicit mono_image_set(uint64_t address) : address(address) {}
 
         uint64_t address;
@@ -227,6 +276,7 @@ namespace mdissect {
 
     bool as_internal(const mono_class& klass, const mono_class& parent);
 
+    // TODO: Safety checks
     template <typename T>
     bool as(const mono_class& klass) {
         return as_internal(klass, T::get_mono_klass());
